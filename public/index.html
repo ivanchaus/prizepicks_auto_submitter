@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PrizePicks Submitter</title>
+</head>
+<body>
+  <h1>PrizePicks Multi-User Submitter</h1>
+  <button id="newSessionBtn">Start New Session</button>
+  <div id="sessionInfo"></div>
+
+  <script>
+    let sessionId = null;
+
+    document.getElementById("newSessionBtn").addEventListener("click", async () => {
+      try {
+        const res = await fetch("http://localhost:3000/api/session");
+        const data = await res.json();
+        sessionId = data.sessionId;
+        document.getElementById("sessionInfo").textContent = "Session ID: " + sessionId;
+      } catch (err) {
+        console.error(err);
+        alert("Failed to start session. Check console.");
+      }
+    });
+  </script>
+</body>
+</html>
+

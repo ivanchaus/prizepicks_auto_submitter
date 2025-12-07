@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PrizePicks Electron</title>
+</head>
+<body>
+  <h1>PrizePicks Electron</h1>
+
+  <button id="start-session-btn">Start New Session</button>
+  <div id="status">Status: Not started</div>
+
+  <hr>
+
+  <input id="session-id-input" placeholder="Session ID" style="width:400px;">
+  <textarea id="entries-input" placeholder="Paste entry URLs, one per line" rows="6" cols="80"></textarea>
+  <input id="wager-input" placeholder="Wager Amount" type="number">
+  <button id="submit-entries-btn">Submit Entries</button>
+  <pre id="submit-status"></pre>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
