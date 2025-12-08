@@ -4,6 +4,7 @@ import fs from "fs-extra";
 import { chromium } from "playwright";
 import { v4 as uuidv4 } from "uuid";
 import { fileURLToPath } from "url";
+// import chromeLauncher from "chrome-launcher"; // FIXED import (no *)
 import * as chromeLauncher from "chrome-launcher";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,14 +13,14 @@ const __dirname = path.dirname(__filename);
 const SESSIONS_DIR = path.join(process.cwd(), "sessions");
 fs.ensureDirSync(SESSIONS_DIR);
 
-const sessions = {}; // sessionId -> { browser, page, sessionPath, ready }
+const sessions = {}; // { sessionId -> { browser, page, sessionPath, ready } }
 
 let mainWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 950,
+    width: 1350,
+    height: 1020,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -40,40 +41,45 @@ app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-// Utility: detect installed Chrome
+/* ==========================================================
+   Detect Installed Chrome
+========================================================== */
 async function getChromeExecutable() {
   try {
-    const installations = await chromeLauncher.Launcher.getInstallations();
+    const installations = await chromeLauncher.getInstallations();
     if (installations.length > 0) {
-      console.log("Found Chrome:", installations[0]);
+      console.log("🟢 Chrome detected:", installations[0]);
       return installations[0];
-    } else {
-      console.warn("No Chrome installation found, using Playwright bundled Chromium.");
-      return undefined; // Playwright will fallback to its Chromium
     }
+    console.warn("⚠️ Chrome not found, using Playwright Chromium.");
+    return undefined;
   } catch (err) {
-    console.error("Chrome detection failed:", err);
+    console.warn("Chrome detection failed, fallback to bundled Chromium");
     return undefined;
   }
 }
 
-/* ---------- IPC: Start new session ---------- */
+/* ==========================================================
+   Start Session
+========================================================== */
 ipcMain.handle("start-session", async () => {
   const sessionId = uuidv4();
-  const sessionPath = path.join(SESSIONS_DIR, sessionId);
-  fs.ensureDirSync(sessionPath);
+
+  // 👉 use real Chrome profile instead of sandbox session
+  const sessionPath = "/Users/ivachau/Library/Application Support/Google/Chrome/Default";
   sessions[sessionId] = { browser: null, page: null, sessionPath, ready: false };
 
   try {
-    const chromePath = await getChromeExecutable();
-
     const browser = await chromium.launchPersistentContext(sessionPath, {
       headless: false,
-      executablePath: chromePath, // auto-detected or undefined
+      executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
       args: [
         "--disable-blink-features=AutomationControlled",
+        "--disable-infobars",
+        "--no-first-run",
+        "--no-default-browser-check",
         "--start-maximized",
-        "--no-sandbox"
+        "--no-sandbox",
       ],
       timeout: 120000
     });
@@ -83,87 +89,108 @@ ipcMain.handle("start-session", async () => {
     sessions[sessionId].page = page;
     sessions[sessionId].ready = true;
 
-    await page.goto("https://app.prizepicks.com/login", { waitUntil: "domcontentloaded" });
+    await page.goto("https://app.prizepicks.com", { waitUntil: "networkidle" });
 
     return { sessionId };
   } catch (err) {
-    console.error("Failed to start session:", err);
     return { error: err.message };
   }
 });
 
-/* ---------- IPC: Session status ---------- */
+/* ==========================================================
+   Check Session Status
+========================================================== */
 ipcMain.handle("session-status", (event, sessionId) => {
-  if (!sessions[sessionId]) return { ready: false };
-  return { ready: sessions[sessionId].ready };
+  const exists = Boolean(sessions[sessionId]);
+  const ready = exists && sessions[sessionId].ready;
+  return { exists, ready };
 });
 
-/* ---------- IPC: Get entries ---------- */
-ipcMain.handle("get-entries", async () => [
-  "https://app.prizepicks.com/board?projections=8376792-u-15.5,8360786-u-12.5,8368048-o-12.5&wager_id=action",
-  "https://app.prizepicks.com/board?projections=8376792-u-15.5,8368048-o-12.5&wager_id=action",
-]);
-
-/* ---------- IPC: Submit selected entries ---------- */
+/* ==========================================================
+   Submit Entries
+========================================================== */
 ipcMain.handle("submit-entries", async (event, { sessionId, selectedLinks, amount }) => {
-  if (!sessions[sessionId] || !sessions[sessionId].ready)
-    return { error: "Invalid or not ready session" };
+  console.log("📩 Submit request:", { sessionId, selectedLinks, amount });
+  console.log("📦 Session lookup:", sessions[sessionId]);
 
-  const { page, sessionPath, browser } = sessions[sessionId];
+  if (!sessions[sessionId]) return { error: "❌ No session found" };
+  if (!sessions[sessionId].ready) return { error: "❌ Session exists but not ready" };
+
+  const { page, browser, sessionPath } = sessions[sessionId];
   const results = [];
 
   for (const link of selectedLinks) {
     try {
-      await page.goto(link, { waitUntil: "networkidle" });
-      await page.waitForTimeout(800 + Math.random() * 500);
+      console.log("➡️ Processing link:", link);
 
-      // Click first "Place Entry" / "Submit" button
-      await page.waitForSelector('button:has-text("Place Entry"), button:has-text("Submit")', { timeout: 10000 });
-      await page.click('button:has-text("Place Entry"), button:has-text("Submit")', { delay: 120 });
+      await page.goto(link.trim(), { waitUntil: "networkidle" });
+      await page.waitForTimeout(1000);
 
-      // Set wager amount if numeric input exists
-      const input = await page.$('input[type="number"]');
-      if (input && amount) {
-        await input.click({ clickCount: 3 });
-        await input.fill(String(amount));
-        await page.waitForTimeout(400);
+      /* ========= SELECT POWER PLAY FIRST ========= */
+      const pp = await page.$('button:has-text("Power Play")');
+      const flex = await page.$('button:has-text("Flex")');
+
+      if (pp) {
+        console.log("💥 Power Play selected");
+        await pp.click({ delay: 120 });
+      } else if (flex) {
+        console.log("⚠️ Only Flex found → clicking Power equivalent");
+        await flex.click({ delay: 120 });
       }
 
-      // Select Power Play option if available
-      const powerPlayBtn = await page.$('button:has-text("Power Play")');
-      if (powerPlayBtn) {
-        await powerPlayBtn.click({ delay: 100 });
-        await page.waitForTimeout(300);
+      await page.waitForTimeout(400);
+
+      /* ========= ENTER WAGER AMOUNT ========= */
+      if (amount) {
+        const input = await page.$('input[type="number"]');
+        if (input) {
+          console.log("💰 Setting wager:", amount);
+          await input.click({ clickCount: 3 });
+          await input.fill(String(amount));
+          await page.waitForTimeout(300);
+        }
       }
 
-      // Confirm final submission
-      await page.waitForSelector('button:has-text("Confirm"), button:has-text("Submit")', { timeout: 10000 });
-      await page.click('button:has-text("Confirm"), button:has-text("Submit")', { delay: 120 });
+      /* ========= FINAL SUBMIT ========= */
+      await page.waitForSelector('button:has-text("Submit"), button:has-text("Place Entry")', {
+        timeout: 10000,
+      });
 
+      await page.click('button:has-text("Submit"), button:has-text("Place Entry")', {
+        delay: 200,
+      });
+
+      console.log("📤 Entry submitted:", link);
       results.push({ link, status: "submitted" });
+
+      await page.waitForTimeout(1200);
     } catch (err) {
+      console.error("❌ Submit failed:", err);
       results.push({ link, status: "failed", error: err.message });
     }
   }
 
-  // Save session storage
   try {
     await browser.storageState({ path: path.join(sessionPath, "storageState.json") });
-  } catch (e) {
-    console.warn("Failed to save storage state:", e.message);
+  } catch (err) {
+    console.warn("⚠️ Failed to save browser state:", err.message);
   }
 
   return results;
 });
-/* ---------- IPC: Close session ---------- */
+
+/* ==========================================================
+   Close Session
+========================================================== */
 ipcMain.handle("close-session", async (event, sessionId) => {
   if (!sessions[sessionId]) return { error: "Invalid session" };
   try {
     await sessions[sessionId].browser.close();
     delete sessions[sessionId];
+    console.log("🛑 Session closed:", sessionId);
     return { closed: true };
   } catch (err) {
-    console.error("Failed to close session:", err);
+    console.error("❌ Close failed:", err);
     return { error: err.message };
   }
 });
