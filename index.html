@@ -1,21 +1,66 @@
+<!-- <!DOCTYPE html>
+<html>
+<head>
+  <title>PrizePicks Electron</title>
+  <style>
+    body { font-family: Arial; padding: 18px; }
+    textarea { width: 100%; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<h2>PrizePicks Auto Submit</h2>
+
+<button id="start-session-btn">Start New Session</button>
+<p id="status"></p>
+
+<h3>Paste Entries</h3>
+<textarea id="entries-input" rows="10" placeholder="Paste entries in ANY format:
+Entry #1: https://app.prizepicks.com/board?projections=...
+Entry #2: https://app.prizepicks.com/board?projections=...
+"></textarea>
+
+<br><br>
+<input id="wager-input" type="number" placeholder="Wager Amount">
+
+<button id="submit-entries-btn">Submit Entries</button>
+<pre id="submit-status"></pre>
+
+<script src="renderer.js"></script>
+</body>
+</html> -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>PrizePicks Electron</title>
+  <title>PrizePicks Automator</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; background: #f0f2f5; }
+    h1 { font-size: 24px; margin-bottom: 20px; }
+    input, textarea, button { font-size: 16px; padding: 8px; margin: 5px 0; }
+    textarea { width: 100%; height: 150px; }
+    button { cursor: pointer; }
+    #submit-status { background: #fff; border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: scroll; white-space: pre-wrap; }
+  </style>
 </head>
 <body>
-  <h1>PrizePicks Electron</h1>
+  <h1>PrizePicks Automator</h1>
 
-  <button id="start-session-btn">Start New Session</button>
-  <div id="status">Status: Not started</div>
+  <label>Session ID:</label><br>
+  <input id="session-id-input" placeholder="Start a session first" readonly style="width: 300px;"><br>
 
-  <hr>
+  <label>Entries (one per line):</label><br>
+  <textarea id="entries-input" placeholder="Paste PrizePicks entry URLs here"></textarea><br>
 
-  <input id="session-id-input" placeholder="Session ID" style="width:400px;">
-  <textarea id="entries-input" placeholder="Paste entry URLs, one per line" rows="6" cols="80"></textarea>
-  <input id="wager-input" placeholder="Wager Amount" type="number">
+  <label>Wager Amount:</label><br>
+  <input id="wager-input" type="number" placeholder="Amount"><br>
+
   <button id="submit-entries-btn">Submit Entries</button>
+  <button id="start-session-btn">Start New Session</button>
+  <button id="close-session-btn">Close Session</button>
+
+  <h2>Status:</h2>
   <pre id="submit-status"></pre>
 
   <script src="renderer.js"></script>
